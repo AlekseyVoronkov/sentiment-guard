@@ -6,3 +6,8 @@ backend/browser_data/
 *.sqlite3
 backend/debug_screenshot.png
 backend/error_screenshot.png
+
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+.DS_Store

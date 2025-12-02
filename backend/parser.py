@@ -97,6 +97,11 @@ def parse_reviews(url: str):
                     if review_text:
                         sentiment = analyze_sentiment(review_text)
 
+                        if rating > 0 and rating <= 2 and sentiment in ["Positive", "Neutral"]:
+                            sentiment = "Negative"
+                        
+                        if rating == 5 and sentiment == "Negative":
+                            sentiment = "Positive"
                         reviews_data.append({
                             "rating": rating,
                             "author": author_name.strip(),

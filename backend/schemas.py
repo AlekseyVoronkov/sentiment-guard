@@ -29,7 +29,25 @@ class CompanyCreate(CompanyBase):
 class Company(CompanyBase):
     id: int
     created_at: datetime
+    owner_id: int
     reviews: List[Review] = []
+
+    class Config:
+        orm_mode = True
+
+class UserBase(BaseModel):
+    email: str  
+
+class UserCreate(UserBase):
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class User(UserBase):
+    id: int
+    is_active: bool
 
     class Config:
         orm_mode = True

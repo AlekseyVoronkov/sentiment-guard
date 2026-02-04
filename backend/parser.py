@@ -17,7 +17,7 @@ def parse_reviews(url: str):
     if oid_match:
         org_id = oid_match.group(1)
         final_url = f"https://yandex.ru/maps/org/{org_id}/reviews/"
-        print(f"Обнаружено ID организации! Собираем нормальную ссылку: {final_url}")
+        print(f"Обнаружено ID организации, собираем нормальную ссылку: {final_url}")
 
     print(f"Начинаем парсинг по URL: {final_url}")
     reviews_data = []
@@ -55,7 +55,7 @@ def parse_reviews(url: str):
             print("Страница загружена, скроллим вниз для подгрузки контента...")
 
             for _ in range(5):
-                page.mouse.wheel(0, 1000)
+                page.mouse.wheel(0, 5000)
                 time.sleep(random.uniform(0.5, 1.5))
             # page.query_selector(".business-review-view")
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -97,11 +97,11 @@ def parse_reviews(url: str):
                     if review_text:
                         sentiment = analyze_sentiment(review_text)
 
-                        if rating > 0 and rating <= 2 and sentiment in ["Positive", "Neutral"]:
-                            sentiment = "Negative"
+                        if rating > 0 and rating <= 2 and sentiment in ["positive", "neutral"]:
+                            sentiment = "negative"
                         
-                        if rating == 5 and sentiment == "Negative":
-                            sentiment = "Positive"
+                        if rating == 5 and sentiment == "negative":
+                            sentiment = "positive"
                         reviews_data.append({
                             "rating": rating,
                             "author": author_name.strip(),

@@ -1,10 +1,17 @@
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+
+import os
+from dotenv import load_dotenv
 
 import crud, models, schemas
 from database import SessionLocal, engine
 from parser import parse_reviews
+from auth import create_access_token, verify_password, get_current_user 
+
+load_dotenv()
 
 app = FastAPI(
     title="Sentiment Guard API"
@@ -29,8 +36,45 @@ def get_db():
 async def read_root():
     return {"message": "Бэк живет и передаёт привет."}
 
+@app.post("/register", response_model=schemas.User)
+def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    return crud.create_user(db=db, user=user)
+
+@app.post("/token")
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = crud.get_user_by_email(db, email=form_data.username)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    if not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(data={"sub": user.email})
+
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/users/me", response_model=schemas.User)
+def read_users_me(current_user: models.User = Depends(get_current_user)):
+    return current_user
+
 @app.post("/companies/", response_model=schemas.Company)
-def create_company(company: schemas.CompanyCreate, db: Session = Depends(get_db)):
+def create_company(
+    company: schemas.CompanyCreate, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     db_company = crud.get_company_by_url(db, url=str(company.url))
     if db_company:
         raise HTTPException(status_code=400, detail="Компания с таким URL уже существует")

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 import os
 from dotenv import load_dotenv
+from typing import List
 
 import crud, models, schemas
 from database import SessionLocal, engine
@@ -36,7 +37,7 @@ def get_db():
 async def read_root():
     return {"message": "Бэк живет и передаёт привет."}
 
-@app.post("/register", response_model=schemas.User)
+@app.post("/auth/register", response_model=schemas.User)
 def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
@@ -44,7 +45,7 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     
     return crud.create_user(db=db, user=user)
 
-@app.post("/token")
+@app.post("/auth/login")
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = crud.get_user_by_email(db, email=form_data.username)
     if not user:
@@ -69,21 +70,40 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
 def read_users_me(current_user: models.User = Depends(get_current_user)):
     return current_user
 
+@app.get("/companies/", response_model=List[schemas.Company])
+def read_companies(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+
+    companies = db.query(models.Company).filter(
+        models.Company.owner_id == current_user.id
+    ).offset(skip).limit(limit).all()
+    
+    return companies
+
 @app.post("/companies/", response_model=schemas.Company)
 def create_company(
     company: schemas.CompanyCreate, 
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    db_company = crud.get_company_by_url(db, url=str(company.url))
+    db_company = crud.get_company_by_url(db, str(company.url), current_user)
     if db_company:
         raise HTTPException(status_code=400, detail="Компания с таким URL уже существует")
 
-    return crud.create_company(db=db, company=company)
+    return crud.create_company(db=db, company=company, user=current_user)
 
 @app.post("/companies/{company_id}/fetch-reviews/")
-def fetch_reviews(company_id: int, db: Session = Depends(get_db)):
-    db_company = db.query(models.Company).filter(models.Company.id == company_id).first()
+def fetch_reviews(company_id: int, 
+                  db: Session = Depends(get_db),
+                  current_user: models.User = Depends(get_current_user)
+                  ):
+
+    db_company = db.query(models.Company).filter(models.Company.id == company_id, 
+                                                 models.Company.owner_id == current_user.id).first()
 
     if db_company is None:
         raise HTTPException(status_code=404, detail="Компания не найдена")
@@ -122,8 +142,13 @@ def fetch_reviews(company_id: int, db: Session = Depends(get_db)):
     }
 
 @app.get("/companies/{company_id}", response_model=schemas.Company)
-def read_company(company_id: int, db: Session = Depends(get_db)):
-    db_company = db.query(models.Company).filter(models.Company.id == company_id).first()
+def read_company(company_id: int, 
+                 db: Session = Depends(get_db),
+                 current_user: models.User = Depends(get_current_user)
+                 ):
+    
+    db_company = db.query(models.Company).filter(models.Company.id == company_id, 
+                                                 models.Company.owner_id == current_user.id).first()
     if db_company is None:
         raise HTTPException(status_code=404, detail="Компания не найдена")
 

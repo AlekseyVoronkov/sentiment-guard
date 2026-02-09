@@ -7,7 +7,7 @@ def get_user_by_email(db: Session, email: str):
 
 def create_user(db: Session, user: schemas.UserCreate):
     hashed_password = get_password_hash(user.password)
-    
+
     db_user = models.User(email=user.email, password_hash=hashed_password)
 
     db.add(db_user)
@@ -16,11 +16,11 @@ def create_user(db: Session, user: schemas.UserCreate):
 
     return db_user
 
-def get_company_by_url(db: Session, url: str):
-    return db.query(models.Company).filter(models.Company.url == url).first()
+def get_company_by_url(db: Session, url: str, user: models.User):
+    return db.query(models.Company).filter(models.Company.url == url, models.Company.owner_id == user.id).first()
 
-def create_company(db: Session, company: schemas.CompanyCreate):
-    db_company = models.Company(name=company.name, url=str(company.url))
+def create_company(db: Session, company: schemas.CompanyCreate, user: models.User):
+    db_company = models.Company(name=company.name, url=str(company.url), owner_id=user.id)
     db.add(db_company)
     db.commit()
     db.refresh(db_company)

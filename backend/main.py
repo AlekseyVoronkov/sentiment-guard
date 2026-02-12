@@ -153,3 +153,20 @@ def read_company(company_id: int,
         raise HTTPException(status_code=404, detail="Компания не найдена")
 
     return db_company
+
+@app.delete("/companies/{company_id}")
+def delete_company_endpoint(
+    company_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    company = db.query(models.Company).filter(
+        models.Company.id == company_id,
+        models.Company.owner_id == current_user.id
+    ).first()
+    
+    if not company:
+        raise HTTPException(status_code=404, detail="Компания не найдена")
+        
+    crud.delete_company(db, company_id)
+    return {"message": "Компания удалена"}

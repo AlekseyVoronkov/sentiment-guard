@@ -4,12 +4,13 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Registration from './pages/Registration';
 import CompanyDashboard from './pages/CompanyDashboard';
+import DashboardList from './pages/DashboardList'
 
 function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home/>} />
+        <Route path="/" element={<DashboardList />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Registration />} />
         <Route path="/" element={<Home />} />

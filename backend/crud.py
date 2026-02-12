@@ -26,6 +26,13 @@ def create_company(db: Session, company: schemas.CompanyCreate, user: models.Use
     db.refresh(db_company)
     return db_company
 
+def delete_company(db: Session, company_id: int):
+    company = db.query(models.Company).filter(models.Company.id == company_id).first()
+    if company:
+        db.delete(company)
+        db.commit()
+    return company
+
 def create_company_review(db: Session, review: schemas.ReviewCreate, company_id: int):
     db_review = models.Review(**review.model_dump(), company_id=company_id)
     db.add(db_review)

@@ -12,15 +12,24 @@ USER_DATA_DIR = "./browser_data"
 
 def parse_reviews(url: str):
     oid_match = re.search(r'oid(?:=|%3D)(\d+)', url)
-
-    final_url = url
+    org_id = None
+    
     if oid_match:
         org_id = oid_match.group(1)
-        final_url = f"https://yandex.ru/maps/org/{org_id}/reviews/"
-        print(f"Обнаружено ID организации, собираем нормальную ссылку: {final_url}")
+        main_url = f"https://yandex.ru/maps/org/{org_id}/"
+        reviews_url = f"https://yandex.ru/maps/org/{org_id}/reviews/"
+        print(f"ID найден: {org_id}")
+    else:
+        main_url = url
+        if url.endswith("/"):
+            reviews_url = url + "reviews/"
+        else:
+            reviews_url = url + "/reviews/"
 
-    print(f"Начинаем парсинг по URL: {final_url}")
+    print(f"1. Идем за адресом: {main_url}")
+
     reviews_data = []
+    company_address = None
 
     with sync_playwright() as playwright:
         context = playwright.chromium.launch_persistent_context(
@@ -34,40 +43,50 @@ def parse_reviews(url: str):
         page = context.pages[0]
 
         try:
-            page.goto(final_url, wait_until="domcontentloaded", timeout=30000)
+            page.goto(main_url, wait_until="domcontentloaded", timeout=30000)
 
             if "showcaptcha" in page.url or page.title() == "Ой!":
                 print("Скрипт ждет, пока капча исчезнет...")
                 page.wait_for_selector(".CheckboxCaptcha-Anchor", state="hidden", timeout=0)
                 print("Капча пройдена! Продолжаем работу...")
-                time.sleep(10)
+                time.sleep(3)
 
-            if "reviews" not in page.url:
-                print("Мы не на вкладке отзывов. Ищем кнопку...")
-                reviews_tab = page.query_selector(".tabs-select-view__title._name_reviews")
+            try:
+                print("Ищем адрес...")
+                page.wait_for_selector(".business-contacts-view__address-link", timeout=5000) 
+                
+                address_element = page.query_selector(".business-contacts-view__address-link")
+                if not address_element:
+                     address_element = page.query_selector("meta[itemprop='address']")
+                     if address_element:
+                         company_address = address_element.get_attribute("content")
+                
+                if address_element and not company_address:
+                    company_address = address_element.inner_text()
+                
+                print(f"Адрес: {company_address}")
+            except Exception as e:
+                print(f"Адрес не найден (не страшно): {e}")
 
-                if reviews_tab:
-                    print("Кнопка найдена, кликаю...")
-                    reviews_tab.click()
-                    page.wait_for_load_state("networkidle")
+            print(f"2. Переходим к отзывам: {reviews_url}")
+            page.goto(reviews_url, wait_until="domcontentloaded", timeout=60000)
 
+            try:
+                page.wait_for_selector(".business-reviews-view__reviews-list", timeout=15000)
+            except:
+                print("Контейнер отзывов не появился сразу, пробуем скроллить...")
 
-            print("Страница загружена, скроллим вниз для подгрузки контента...")
-
+            print("Скроллим...")
             for _ in range(5):
                 page.mouse.wheel(0, 5000)
-                time.sleep(random.uniform(0.5, 1.5))
-            # page.query_selector(".business-review-view")
+                time.sleep(random.uniform(0.5, 1.0))
+            
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+
             page.wait_for_timeout(3000)
 
             review_elements = page.query_selector_all(".business-review-view")
-            print(f"Найдено {len(review_elements)} отзывов на странице.")
-
-            if not review_elements:
-                print("Отзывы не найдены.")
-                page.screenshot(path="debug_screenshot.png")
-                print("Сделан отладочный скриншот debug_screenshot.png")
+            print(f"Найдено {len(review_elements)} отзывов.")
 
             for review_element in review_elements:
                 try:
@@ -121,7 +140,7 @@ def parse_reviews(url: str):
             context.close()
 
     print(f"Парсинг завершен. Собрано {len(reviews_data)} отзывов.")
-    return reviews_data
+    return reviews_data, company_address
 
 
 def main():

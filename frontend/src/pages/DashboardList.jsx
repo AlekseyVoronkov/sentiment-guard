@@ -43,17 +43,24 @@ const DashboardList = () => {
     }
 
     const handleAddCompany = async () => {
-        if (!newUrl) return;
-        setConfirmLoading(true);
         try {
-            await api.post('/companies/', { name: "Новая компания", url: newUrl });
+            const values = await form.validateFields();
+            setConfirmLoading(true);
+            
+            await api.post('/companies/', { 
+                name: values.name, 
+                url: values.url 
+            });
+            
             message.success('Компания добавлена');
             setIsAddModalVisible(false);
-            setNewUrl('');
+            form.resetFields();
+
             const res = await api.get('/companies/');
             setCompanies(res.data);
         } catch (error) {
-            message.error('Ошибка при добавлении');
+            console.error(error);
+            message.error('Ошибка при добавлении (проверьте ссылку или имя)');
         } finally {
             setConfirmLoading(false);
         }

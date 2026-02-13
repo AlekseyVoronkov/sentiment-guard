@@ -22,6 +22,7 @@ class Review(ReviewBase):
 class CompanyBase(BaseModel):
     name: str
     url: HttpUrl
+    address: Optional[str] = None
 
 class CompanyCreate(CompanyBase):
     pass
@@ -29,6 +30,7 @@ class CompanyCreate(CompanyBase):
 class Company(CompanyBase):
     id: int
     created_at: datetime
+    address: Optional[str] = None 
     owner_id: int
     reviews: List[Review] = []
 

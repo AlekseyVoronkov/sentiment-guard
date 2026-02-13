@@ -114,8 +114,11 @@ def fetch_reviews(company_id: int,
 
     print(f"Итоговый URL для парсера: {final_url}")
 
-    reviews_data = parse_reviews(final_url)
+    reviews_data, parsed_address = parse_reviews(final_url)
 
+    if parsed_address:
+        crud.update_company_address(db, company_id, parsed_address)
+        
     saved_reviews_count = 0
     skipped_reviews_count = 0
 
@@ -138,7 +141,8 @@ def fetch_reviews(company_id: int,
     return {
         "message": "Парсинг завершен.",
         "saved_new_reviews": saved_reviews_count,
-        "skipped_duplicates": skipped_reviews_count
+        "skipped_duplicates": skipped_reviews_count,
+        "found_address": parsed_address 
     }
 
 @app.get("/companies/{company_id}", response_model=schemas.Company)

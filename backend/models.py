@@ -11,6 +11,7 @@ class Company(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     url = Column(String, unique=True, index=True)
+    address = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     owner_id = Column(Integer, ForeignKey("users.id"))
 

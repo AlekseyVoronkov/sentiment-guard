@@ -11,6 +11,10 @@ from sentiment import analyze_sentiment
 USER_DATA_DIR = "./browser_data"
 
 def parse_reviews(url: str):
+
+    if "/maps/org/" in url and "reviews" not in url and "?" not in url:
+        url = url.rstrip("/") + "/reviews/"
+
     oid_match = re.search(r'oid(?:=|%3D)(\d+)', url)
     org_id = None
     
@@ -152,7 +156,8 @@ def parse_reviews(url: str):
                             "author": author_name.strip(),
                             "text": review_text.strip(),
                             "date": review_date.strip(),
-                            "sentiment": sentiment
+                            "sentiment": sentiment,
+                            "source": "yandex"
                         })
                 except Exception as e:
                     print(f"Произошла ошибка при парсинге отзыва: {e}")

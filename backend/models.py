@@ -10,7 +10,10 @@ class Company(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
-    url = Column(String, unique=True, index=True)
+    
+    url_yandex = Column(String, nullable=True) 
+    url_2gis = Column(String, nullable=True)
+
     address = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     owner_id = Column(Integer, ForeignKey("users.id"))
@@ -27,7 +30,8 @@ class Review(Base):
     date = Column(String)
     rating = Column(Integer)
     sentiment = Column(String, index=True, nullable=True)
-
+    source = Column(String, index=True, default='yandex')
+    
     company_id = Column(Integer, ForeignKey("companies.id"))
     company = relationship("Company", back_populates="reviews")
 

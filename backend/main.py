@@ -9,7 +9,7 @@ from typing import List
 
 import crud, models, schemas
 from database import SessionLocal, engine
-from parser import parse_reviews
+from parsers import yandex, twogis
 from auth import create_access_token, verify_password, get_current_user 
 
 load_dotenv()
@@ -90,59 +90,65 @@ def create_company(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    db_company = crud.get_company_by_url(db, str(company.url), current_user)
-    if db_company:
-        raise HTTPException(status_code=400, detail="Компания с таким URL уже существует")
+    db_company = crud.get_company_by_name(db, company.name, current_user.id)
 
-    return crud.create_company(db=db, company=company, user=current_user)
+    if db_company:
+        raise HTTPException(status_code=400, detail="Компания с таким именем уже существует")
+
+    return crud.create_company(db=db, company=company, user_id=current_user.id)
 
 @app.post("/companies/{company_id}/fetch-reviews/")
-def fetch_reviews(company_id: int, 
-                  db: Session = Depends(get_db),
-                  current_user: models.User = Depends(get_current_user)
-                  ):
+def fetch_reviews(
+    company_id: int, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+    ):
 
-    db_company = db.query(models.Company).filter(models.Company.id == company_id, 
-                                                 models.Company.owner_id == current_user.id).first()
+    db_company = db.query(models.Company).filter(
+        models.Company.id == company_id, 
+        models.Company.owner_id == current_user.id
+        ).first()
 
     if db_company is None:
         raise HTTPException(status_code=404, detail="Компания не найдена")
+    
+    total_new_reviews = 0
 
-    final_url = str(db_company.url)
-    if "/maps/org/" in final_url and "reviews" not in final_url and "?" not in final_url:
-        final_url = final_url.rstrip("/") + "/reviews/"
+    if db_company.url_yandex:
+        print(f"Запускаем парсер Яндекс для: {db_company.url_yandex}")
 
-    print(f"Итоговый URL для парсера: {final_url}")
+        reviews_data, parsed_address = yandex.parse_reviews(db_company.url_yandex)
 
-    reviews_data, parsed_address = parse_reviews(final_url)
+        if parsed_address:
+            crud.update_company_address(db, company_id, parsed_address)
 
-    if parsed_address:
-        crud.update_company_address(db, company_id, parsed_address)
-        
-    saved_reviews_count = 0
-    skipped_reviews_count = 0
+        for review in reviews_data:
+            existing_review = crud.get_review_by_content(
+                db, company_id, review['author'], review['text'], review['date'], 'yandex'
+            )
 
-    for review in reviews_data:
-        existing_review = crud.get_review_by_content(
-            db=db,
-            company_id=company_id,
-            author=review['author'],
-            text=review['text'],
-            date=review['date']
-        )
+            if not existing_review:
+                crud.create_company_review(db, schemas.ReviewCreate(**review), company_id)
+                total_new_reviews += 1
 
-        if not existing_review:
-            review_schema = schemas.ReviewCreate(**review)
-            crud.create_company_review(db=db, review=review_schema, company_id=company_id)
-            saved_reviews_count += 1
-        else:
-            skipped_reviews_count += 1
+    if db_company.url_2gis:
+        print(f"Запускаем парсер 2ГИС для: {db_company.url_2gis}")
 
+        reviews_data, parsed_address = twogis.parse_reviews(db_company.url_2gis)
+
+        if parsed_address:
+            crud.update_company_address(db, company_id, parsed_address)
+
+        for review in reviews_data:
+            existing_review = crud.get_review_by_content(
+                db, company_id, review['author'], review['text'], review['date'], '2gis'
+            )
+
+            if not existing_review:
+                crud.create_company_review(db, schemas.ReviewCreate(**review), company_id)
+                total_new_reviews += 1
     return {
-        "message": "Парсинг завершен.",
-        "saved_new_reviews": saved_reviews_count,
-        "skipped_duplicates": skipped_reviews_count,
-        "found_address": parsed_address 
+        "message": f"Парсинг завершен. Новых отзывов: {total_new_reviews}",
     }
 
 @app.get("/companies/{company_id}", response_model=schemas.Company)

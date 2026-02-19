@@ -3,6 +3,7 @@ backend/__pycache__/
 *.py[cod]
 backend/.env
 backend/browser_data/
+backend/browser_data_2gis/
 *.sqlite3
 backend/debug_screenshot.png
 backend/error_screenshot.png

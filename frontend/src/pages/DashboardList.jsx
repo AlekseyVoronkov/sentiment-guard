@@ -45,11 +45,18 @@ const DashboardList = () => {
     const handleAddCompany = async () => {
         try {
             const values = await form.validateFields();
+
+            if (!values.url_yandex && !values.url_2gis) {
+                message.warning('Укажите хотя бы одну ссылку (Яндекс или 2ГИС)');
+                return;
+            }
+
             setConfirmLoading(true);
             
             await api.post('/companies/', { 
                 name: values.name, 
-                url: values.url 
+                url_yandex: values.url_yandex,
+                url_2gis: values.url_2gis
             });
             
             message.success('Компания добавлена');
@@ -60,7 +67,8 @@ const DashboardList = () => {
             setCompanies(res.data);
         } catch (error) {
             console.error(error);
-            message.error('Ошибка при добавлении (проверьте ссылку или имя)');
+            const msg = error.response?.data?.detail || 'Ошибка при добавлении';
+            message.error(Array.isArray(msg) ? msg[0].msg : msg);
         } finally {
             setConfirmLoading(false);
         }
@@ -174,16 +182,30 @@ const DashboardList = () => {
                     >
                         <Input placeholder="Например: Кофейня Ромашка" />
                     </Form.Item>
+
                     <Form.Item
-                        name="url"
+                        name="url_yandex"
                         label="Ссылка на отзывы (Яндекс.Карты)"
                         rules={[
-                            { required: true, message: 'Введите ссылку' },
                             { type: 'url', message: 'Это должна быть валидная ссылка' }
                         ]}
                     >
                         <Input placeholder="https://yandex.ru/maps/..." />
                     </Form.Item>
+
+                    <Form.Item
+                        name="url_2gis"
+                        label="Ссылка на отзывы (2GIS)"
+                        rules={[
+                            { type: 'url', message: 'Это должна быть валидная ссылка' }
+                        ]}
+                    >
+                        <Input placeholder="https://2gis.ru/..." />
+                    </Form.Item>
+
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                        * Укажите хотя бы одну ссылку
+                    </Text>
                 </Form>
             </Modal>
         </Layout>

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, model_validator
 from typing import List, Optional
 from datetime import datetime
 
@@ -8,6 +8,7 @@ class ReviewBase(BaseModel):
     date: str
     rating: int
     sentiment: Optional[str] = None
+    source: str = 'yandex'
 
 class ReviewCreate(ReviewBase):
     pass
@@ -21,10 +22,16 @@ class Review(ReviewBase):
 
 class CompanyBase(BaseModel):
     name: str
-    url: HttpUrl
+    url_yandex: Optional[HttpUrl] = None
+    url_2gis: Optional[HttpUrl] = None
     address: Optional[str] = None
 
 class CompanyCreate(CompanyBase):
+    @model_validator(mode='after')
+    def check_at_least_one_url(self):
+        if not self.url_yandex and not self.url_2gis:
+            raise ValueError('Нужно указать хотя бы одну ссылку (Яндекс или 2ГИС)')
+        return self
     pass
 
 class Company(CompanyBase):

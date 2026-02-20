@@ -7,7 +7,6 @@ from utils import convert_date
 USER_DATA_DIR = "./browser_data_2gis"
 
 def parse_reviews(url: str):
-    # --- URL LOGIC ---
     if "kemerovo/firm" in url and "reviews" not in url:
         url = url.rstrip("/") + "/reviews/"
 
@@ -35,7 +34,6 @@ def parse_reviews(url: str):
         page = context.pages[0]
 
         try:
-            # --- ADRESS ---
             page.goto(main_url, wait_until="domcontentloaded", timeout=60000)
             time.sleep(2)
             try:
@@ -46,7 +44,6 @@ def parse_reviews(url: str):
                     print(f"Адрес: {company_address}")
             except: pass
 
-            # --- REVIEWS ---
             print(f"Идем к отзывам: {reviews_url}")
             page.goto(reviews_url, wait_until="domcontentloaded", timeout=60000)
             time.sleep(4)
@@ -55,21 +52,30 @@ def parse_reviews(url: str):
 
             last_count = 0
             retries = 0
-            
-            # Крутим сильнее и дольше, чтобы собрать все (включая отредактированные)
+            js_count_script = """() => {
+                const dateRegex = /(\\d{1,2}\\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)(\\s+\\d{4})?)|сегодня|вчера/i;
+                let count = 0;
+                document.querySelectorAll('div, span').forEach(el => {
+                    if (el.children.length === 0 && dateRegex.test(el.innerText)) count++;
+                });
+                return count;
+            }"""
+
             while True:
+                try:
+                    btn = page.get_by_role("button", name="Загрузить ещё")
+                    if btn.is_visible():
+                        btn.click()
+                except: pass
+
                 for _ in range(3):
-                    page.mouse.wheel(0, 4000)
+                    page.mouse.wheel(0, 15000)
                     time.sleep(0.5)
                 
                 time.sleep(2)
-                
-                # Считаем по датам (они есть у всех отзывов)
-                # Ищем элементы, содержащие цифры и название месяца
-                # Это грубая проверка для счетчика
-                # (Более точная проверка будет при парсинге)
-                current_count = len(page.query_selector_all("meta[itemprop='datePublished']"))
-                print(f"Скролл... Вижу ~{current_count} отзывов")
+
+                current_count = page.evaluate(js_count_script)
+                print(f"Вижу отзывов: {current_count}")
 
                 if current_count >= 500: break
                 if current_count > last_count:
@@ -82,90 +88,136 @@ def parse_reviews(url: str):
             # --- PARSING ---
             print("Начинаем разбор...")
             
-            date_regex = re.compile(r'(\d{1,2}\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)(\s+\d{4})?)|сегодня|вчера', re.IGNORECASE)
+            raw_reviews_data = page.evaluate("""() => {
+                const results = [];
+                // Регулярка для дат
+                const dateRegex = /^(\\d{1,2}\\s+(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)(\\s+\\d{4})?)(.*)?$|сегодня|вчера/i;
+                
+                // Ищем все div и span
+                const elements = document.querySelectorAll('div, span');
+                const seen_texts = new Set();
+
+                elements.forEach(el => {
+                    // смотрим только листья дерева
+                    if (el.children.length > 0) return;
+                    
+                    const text = el.innerText.trim();
+                    if (!text) return;
+
+                    const cleanDate = text.split(',')[0].trim();
+
+                    if (dateRegex.test(cleanDate)) {
+                        // Поднимаемся на 5 уровней вверх
+                        let container = el;
+                        for (let i = 0; i < 5; i++) {
+                            if (container.parentElement) container = container.parentElement;
+                        }
+                        
+                        if (container) {
+                            const fullText = container.innerText;
+                            if (!seen_texts.has(fullText)) {
+                                seen_texts.add(fullText);
+                                
+                                let rating = 0;
+                                // Ищем все SVG внутри этого контейнера
+                                const svgs = container.querySelectorAll('svg');
+                                svgs.forEach(svg => {
+                                    const width = svg.getAttribute('width');
+                                    const fill = svg.getAttribute('fill');
+                                    
+                                    // Проверяем: ширина около 10px и цвет НЕ серый
+                                    if (width && parseInt(width) <= 14) {
+                                        if (fill && !fill.includes('929292')) {
+                                            rating++;
+                                        }
+                                    }
+                                });
+                                if (rating > 5) rating = 5;
+
+                                results.push({
+                                    raw_date: text,
+                                    full_text: fullText,
+                                    rating: rating // Передаем рейтинг в Python
+                                });
+                            }
+                        }
+                    }
+                });
+                return results;
+            }""")
             
-            candidates = page.query_selector_all("div, span")
-            processed_ids = set() # Храним уникальные тексты/ID
+            print(f"JS вернул {len(raw_reviews_data)} блоков. Обрабатываем...")
 
-            for cand in candidates:
+            for item in raw_reviews_data:
                 try:
-                    raw_text = cand.inner_text().strip()
-                    # Убираем ", отредактирован" для проверки регуляркой
-                    clean_date_text = raw_text.split(',')[0].strip()
+                    full_text = item['full_text']
+                    raw_date = item['raw_date']
+                    rating = item['rating']
+                    
+                    clean_date_check = raw_date.split(',')[0].strip()
 
-                    if date_regex.fullmatch(clean_date_text):
-                        review_date = clean_date_text # "20 июля 2024"
-                        
-                        # Ищем контейнер
-                        container = cand.evaluate_handle("el => el.parentElement.parentElement.parentElement.parentElement.parentElement").as_element()
-                        if not container: continue
-                        
-                        full_text_blob = container.inner_text()
-                        
-                        # Защита от дублей
-                        h = hash(full_text_blob)
-                        if h in processed_ids: continue
-                        processed_ids.add(h)
+                    lines = [l.strip() for l in full_text.split('\n') if l.strip()]
+                    
+                    author_name = "Аноним"
+                    review_text = ""
+                    
+                    # Находим индекс даты
+                    date_index = -1
+                    for i, line in enumerate(lines):
+                        if line.startswith(clean_date_check):
+                            date_index = i
+                            break
+                    
+                    if date_index != -1:
+                        # 1. АВТОР
+                        if date_index > 0:
+                            potential_author = lines[date_index - 1]
+                            if len(potential_author) <= 2 and potential_author.isupper() and date_index > 1:
+                                potential_author = lines[date_index - 2]
+                            author_name = re.sub(r'\d+\s+отзыв.*', '', potential_author).strip().strip('\u200b')
 
-                        # 1. АВТОР (Ищем ссылку на юзера внутри контейнера - это 100% вариант)
-                        author_name = "Аноним"
-                        user_link = container.query_selector("a[href*='/user/']")
-                        if user_link:
-                            author_name = user_link.inner_text().strip()
-                        
-                        # 2. РАЗБОР ТЕКСТА
-                        lines = [l.strip() for l in full_text_blob.split('\n') if l.strip()]
-                        review_text = ""
-                        max_len = 0
-                        
-                        for l in lines:
-                            # ФИЛЬТРЫ МУСОРА:
-                            # 1. Если строка совпадает с датой (даже с "отредактирован")
-                            if l.startswith(review_date) or clean_date_text in l: continue
-                            # 2. Если строка совпадает с автором
-                            if l == author_name: continue
-                            # 3. Если это "5 отзывов" или "Знаток города"
-                            if "отзыв" in l.lower() or "знаток" in l.lower(): continue
-                            # 4. Если это "Отзыв подтвержден" и прочее
-                            if "подтверждён" in l or "Официальный ответ" in l or "Показать ещё" in l: continue
-                            # 5. Инициалы из аватарки (обычно 1-2 заглавные буквы)
-                            if len(l) <= 2 and l.isupper(): continue
-                            
-                            # Ищем самую длинную оставшуюся строку
-                            if len(l) > max_len:
-                                review_text = l
-                                max_len = len(l)
-                        
-                        if len(review_text) < 2: continue # Пустышки не нужны
+                        # 2. ТЕКСТ
+                        if date_index + 1 < len(lines):
+                            potential_text = lines[date_index + 1]
+                            bad_words = ["Читать целиком", "Полезно?", "1 посещение", "Отзыв подтверждён"]
+                            if not any(bw in potential_text for bw in bad_words):
+                                review_text = potential_text
+                            else:
+                                if date_index + 2 < len(lines):
+                                    review_text = lines[date_index + 2]
 
-                        # 3. РЕЙТИНГ (Пока 0, т.к. 2ГИС прячет)
-                        rating = 0
-                        
-                        # 4. СЕНТИМЕНТ
-                        sentiment = analyze_sentiment(review_text)
+                    if not review_text or len(review_text) < 2 or "Читать целиком" in review_text: 
+                        continue
+                    
+                    sentiment = analyze_sentiment(review_text)
+                    
+                    if rating > 0:
+                        if rating <= 2 and sentiment in ["Positive", "Neutral"]:
+                            sentiment = "Negative"
+                        if rating == 5 and sentiment == "Negative":
+                            sentiment = "Positive"
 
-                        reviews_data.append({
-                            "rating": rating,
-                            "author": author_name,
-                            "text": review_text,
-                            "date": convert_date(review_date),
-                            "sentiment": sentiment,
-                            "source": "2gis"
-                        })
-                        
-                        print(f"[OK] {author_name} ({review_date}): {review_text[:30]}...")
+                    reviews_data.append({
+                        "rating": rating,
+                        "author": author_name,
+                        "text": review_text,
+                        "date": convert_date(raw_date),
+                        "sentiment": sentiment,
+                        "source": "2gis"
+                    })
 
                 except Exception as e:
                     pass
+
 
         except Exception as e:
             print(f"Error: {e}")
         finally:
             context.close()
 
+    print(f"2ГИС завершен. Собрано: {len(reviews_data)}")
     return reviews_data, company_address
 
 if __name__ == "__main__":
-    url = "https://2gis.ru/kemerovo/firm/70000001032439269" 
-    res, _ = parse_reviews(url)
-    print(f"Всего: {len(res)}")
+    url = "https://2gis.ru/kemerovo/firm/704670989297908" 
+    parse_reviews(url)

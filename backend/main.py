@@ -97,6 +97,29 @@ def create_company(
 
     return crud.create_company(db=db, company=company, user_id=current_user.id)
 
+@app.put("/companies/{company_id}", response_model=schemas.Company)
+def update_company(
+    company_id: int,
+    company_update: schemas.CompanyCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+    ):
+    db_company = db.query(models.Company).filter(
+        models.Company.id == company_id,
+        models.Company.owner_id == current_user.id
+    ).first()
+
+    if not db_company:
+        raise HTTPException(status_code=404, detail="Компания не найдена")
+
+    db_company.name = company_update.name
+    db_company.url_yandex = str(company_update.url_yandex) if company_update.url_yandex else None
+    db_company.url_2gis = str(company_update.url_2gis) if company_update.url_2gis else None
+
+    db.commit()
+    db.refresh(db_company)
+    return db_company
+
 @app.post("/companies/{company_id}/fetch-reviews/")
 def fetch_reviews(
     company_id: int, 

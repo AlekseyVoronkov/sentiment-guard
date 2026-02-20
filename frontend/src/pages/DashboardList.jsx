@@ -15,7 +15,11 @@ const DashboardList = () => {
     
     const [isAddModalVisible, setIsAddModalVisible] = useState(false);
     const [confirmLoading, setConfirmLoading] = useState(false);
+    
+    const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+    const [editingCompany, setEditingCompany] = useState(null);
 
+    const [editForm] = Form.useForm();
     const [form] = Form.useForm();
 
     const fetchData = async () => {
@@ -93,9 +97,38 @@ const DashboardList = () => {
         });
     };
 
-    const handleEditCompany = (id) => {
-        // todo
-    }
+    const openEditModal = (company) => {
+        setEditingCompany(company);
+        editForm.setFieldsValue({
+            name: company.name,
+            url_yandex: company.url_yandex,
+            url_2gis: company.url_2gis
+        });
+        setIsEditModalVisible(true);
+    };
+
+    const handleUpdateCompany = async () => {
+        try {
+            const values = await editForm.validateFields();
+            setConfirmLoading(true);
+            
+            await api.put(`/companies/${editingCompany.id}`, {
+                name: values.name,
+                url_yandex: values.url_yandex,
+                url_2gis: values.url_2gis
+            });
+            
+            message.success('Обновлено!');
+            setIsEditModalVisible(false);
+            
+            const res = await api.get('/companies/');
+            setCompanies(res.data);
+        } catch (error) {
+            message.error('Ошибка обновления');
+        } finally {
+            setConfirmLoading(false);
+        }
+    };
 
     if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
 
@@ -143,7 +176,7 @@ const DashboardList = () => {
                                 style={{ height: '180px', display: 'flex', flexDirection: 'column' }}
                                 styles={{ body: { flex: 1 } }}
                                 actions={[
-                                    <SettingOutlined key="edit" onClick={(e) => { e.stopPropagation(); handleEditCompany(item.id); }} />,
+                                    <SettingOutlined key="edit" onClick={(e) => { e.stopPropagation(); openEditModal(item); }} />,
                                     <DeleteOutlined key="delete" style={{ color: 'red' }} onClick={(e) => { e.stopPropagation(); handleDeleteCompany(item.id); }} />
                                 ]}
                                 onClick={() => navigate(`/company/${item.id}`)}
@@ -206,6 +239,26 @@ const DashboardList = () => {
                     <Text type="secondary" style={{ fontSize: 12 }}>
                         * Укажите хотя бы одну ссылку
                     </Text>
+                </Form>
+            </Modal>
+
+            <Modal
+                title="Настройки компании"
+                open={isEditModalVisible}
+                onOk={handleUpdateCompany}
+                onCancel={() => setIsEditModalVisible(false)}
+                confirmLoading={confirmLoading}
+            >
+                <Form form={editForm} layout="vertical">
+                    <Form.Item name="name" label="Название" rules={[{ required: true }]}>
+                        <Input />
+                    </Form.Item>
+                    <Form.Item name="url_yandex" label="Ссылка Яндекс">
+                        <Input />
+                    </Form.Item>
+                    <Form.Item name="url_2gis" label="Ссылка 2ГИС">
+                        <Input />
+                    </Form.Item>
                 </Form>
             </Modal>
         </Layout>

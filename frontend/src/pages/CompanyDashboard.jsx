@@ -13,6 +13,9 @@ const SENTIMENT_COLORS = {
   'negative': '#f5222d'
 };
 
+const YandexIcon = () => <span style={{ color: 'red', fontWeight: 'bold', marginRight: 5 }}>Я</span>;
+const TwoGisIcon = () => <span style={{ color: 'green', fontWeight: 'bold', marginRight: 5 }}>2</span>;
+
 const CompanyDashboard = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -184,7 +187,14 @@ const CompanyDashboard = () => {
                     }
                   >
                     <List.Item.Meta
-                      title={<span style={{ fontWeight: 'bold' }}>{item.author}</span>}
+                      title={
+                        <span>
+                            {item.source === 'yandex' ? <YandexIcon /> : null}
+                            {item.source === '2gis' ? <TwoGisIcon /> : null}
+                            
+                            <span style={{ fontWeight: 'bold' }}>{item.author}</span>
+                        </span>
+                      }
                     />
                     {item.text}
                   </List.Item>
